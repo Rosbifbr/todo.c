@@ -46,6 +46,19 @@ int create_listen_socket(char *ip, int port) {
   return sockfd;
 }
 
+void write_response_headers(uint status, uint content_length, int fd) {
+  // TODO: map status code
+  char answer_headers[512];
+  char *template = "HTTP/1.1 %d OK\r\n"
+                   "Content-Length: %d\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Server: Ródŕîgô'ŝ himself\r\n\r\n";
+
+  sprintf(answer_headers, template, status,
+          strlen(answer_headers) + content_length);
+  write(fd, answer_headers, strlen(answer_headers));
+}
+
 void process_request() {}
 
 int main() {
@@ -72,12 +85,7 @@ int main() {
     read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
     printf("%s\n", buf);
 
-    // Answer basic 200 for now
-    char *answer_headers = "HTTP/1.1 200 OK\r\n"
-                           "Content-Length: 13\r\n"
-                           "Content-Type: text/plain\r\n\r\n"
-                           "Helló, WÔrld!";
-    write(req_file_desc, answer_headers, strlen(answer_headers));
+    write_response_headers(200, 100, req_file_desc);
 
     // Close fd ungracefully
     close(req_file_desc);

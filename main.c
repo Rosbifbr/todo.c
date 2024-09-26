@@ -1,6 +1,8 @@
 #include <arpa/inet.h>
+#include <bits/types/struct_iovec.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +13,101 @@
 // Constants
 #define PORT 8080
 #define IP "127.0.0.1"
-#define REQUEST_BUFFER_SIZE 4096
+#define REQUEST_BUFFER_SIZE 64 * 1024 // hugeaass file
 
+enum http_methods {
+  GET,
+  POST,
+  PUT,
+  DELETE,
+  PATCH,
+  OPTIONS,
+  HEAD,
+  TRACE,
+  CONNECT
+};
+
+// MEDIUM LEVEL
+void write_response_headers(uint status, uint content_length, int fd) {
+  // TODO: map status code
+  char answer_headers[512];
+  char *template = "HTTP/1.1 %d OK\r\n"
+                   "Content-Length: %d\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Server: Ródŕîgô'ŝ himself\r\n\r\n";
+
+  sprintf(answer_headers, template, status, content_length);
+  write(fd, answer_headers, strlen(answer_headers));
+}
+
+// HIGH LEVEL - ROUTES
+void get_root_page(int req_file_desc) {
+  write_response_headers(404, 0, req_file_desc);
+  printf("Root called\n");
+}
+void post_create_todo(int req_file_desc) {
+  write_response_headers(404, 0, req_file_desc);
+  printf("Create called!\n");
+}
+void post_delete_todo(int req_file_desc) {
+  write_response_headers(404, 0, req_file_desc);
+  printf("delete called!\n");
+}
+
+void process_request(int req_file_desc) {
+  char *buf = malloc(REQUEST_BUFFER_SIZE);
+  read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
+  printf("%s\n", buf); // TODO: mmaybe turn this off
+
+  // Map our request to other functions
+  enum http_methods method;
+  if (buf[0] == 'G' && buf[1] == 'E' && buf[2] == 'T') {
+    method = GET;
+  } else {
+    method = POST;
+  }
+
+  // getting the path
+  char *path = malloc(256);
+  int path_start = -1;
+  int path_end = -1;
+  for (int i = 0; i < REQUEST_BUFFER_SIZE; i++) {
+    printf("a");
+    if (path_start == -1 && buf[i] == '/') {
+      path_start = i;
+    } else if (path_start != -1 && buf[i] == ' ') {
+      path_end = i;
+      break;
+    } else if (buf[i] == '\0') {
+      // break at null chars for now
+      break;
+    }
+  }
+  memcpy(path, buf + path_start, path_end - path_start);
+
+  if (method == GET && 0 == strcmp("/", path))
+    get_root_page(req_file_desc);
+  else if (method == POST && 0 == strcmp("/create", path))
+    post_create_todo(req_file_desc);
+  else if (method == POST && 0 == strcmp("/destroy", path))
+    post_delete_todo(req_file_desc);
+  else
+    write_response_headers(404, 0, req_file_desc);
+
+  // Free allocated memory after request
+  free(path);
+  free(buf);
+
+  // Close fd after processing
+  close(req_file_desc);
+}
+
+void handle_sigint(int fd) {
+  close(fd);
+  exit(0);
+}
+
+// LOW LEVEL
 int create_listen_socket(char *ip, int port) {
   int sockfd;
   struct sockaddr_in server_addr;
@@ -32,11 +127,11 @@ int create_listen_socket(char *ip, int port) {
   // Bind to socket
   if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
     perror("Error binding socket");
-    // close(sockfd);
+    close(sockfd);
     return -1;
   }
 
-  if (listen(sockfd, 3) < 0) {
+  if (listen(sockfd, 8) < 0) {
     perror("Shit has happened at socket listeining");
   }
 
@@ -46,30 +141,17 @@ int create_listen_socket(char *ip, int port) {
   return sockfd;
 }
 
-void write_response_headers(uint status, uint content_length, int fd) {
-  // TODO: map status code
-  char answer_headers[512];
-  char *template = "HTTP/1.1 %d OK\r\n"
-                   "Content-Length: %d\r\n"
-                   "Content-Type: text/plain\r\n"
-                   "Server: Ródŕîgô'ŝ himself\r\n\r\n";
-
-  sprintf(answer_headers, template, status,
-          strlen(answer_headers) + content_length);
-  write(fd, answer_headers, strlen(answer_headers));
-}
-
-void process_request() {}
-
 int main() {
   // init
   int sock_desc = create_listen_socket(IP, PORT);
+
+  // Process C-c and the like so that socket is not hanging
+  signal(SIGINT, (void (*)(int))handle_sigint);
 
   // loop setup
   int req_file_desc;
   struct sockaddr_in client_addr;
   socklen_t client_len = sizeof(client_addr);
-  char *buf = malloc(REQUEST_BUFFER_SIZE);
 
   // main server loop
   while (1) {
@@ -80,15 +162,7 @@ int main() {
       continue;
     }
 
-    // Get basic information from fd.
-    // TODO: truncate data stream so not to log all data
-    read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
-    printf("%s\n", buf);
-
-    write_response_headers(200, 100, req_file_desc);
-
-    // Close fd ungracefully
-    close(req_file_desc);
+    process_request(req_file_desc);
   }
 
   return 0;

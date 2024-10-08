@@ -32,12 +32,11 @@ struct todo {
   int id;
 };
 typedef struct todo todo;
-
-todo *todos[64];
+todo *todos[64]; // program memory
 
 // MEDIUM LEVEL
 void generate_todos_html(char *buf) {
-  char *template = "<form action='/delete' class='todo'>"
+  char *template = "<form action='/delete' class='todo' method='POST'>"
                    "<input type='hidden' name='id' value='%d'></input>"
                    "<input type='submit' value='Delete'></input>"
                    "<span>    %s</span>"
@@ -89,7 +88,7 @@ void get_root_page(int req_file_desc) {
   generate_todos_html(todos_string);
 
   // template the todos into res
-  char *res = malloc(strlen(template) + 1);
+  char *res = malloc(strlen(template) + strlen(todos_string));
   sprintf(res, template, todos_string);
 
   // send it all to client
@@ -102,12 +101,23 @@ void get_root_page(int req_file_desc) {
   printf("root called!\n");
 }
 void post_create_todo(int req_file_desc) {
-  write_response_headers(404, 0, req_file_desc);
+  // Redirect to root using proper HTTP headers
+  char *redirect_response = "HTTP/1.1 302 Found\r\n"
+                            "Location: /\r\n"
+                            "Content-Length: 0\r\n"
+                            "\r\n";
+  write(req_file_desc, redirect_response, strlen(redirect_response));
   printf("Create called!\n");
 }
+
 void post_delete_todo(int req_file_desc) {
-  write_response_headers(404, 0, req_file_desc);
-  printf("delete called!\n");
+  // Redirect to root using proper HTTP headers
+  char *redirect_response = "HTTP/1.1 302 Found\r\n"
+                            "Location: /\r\n"
+                            "Content-Length: 0\r\n"
+                            "\r\n";
+  write(req_file_desc, redirect_response, strlen(redirect_response));
+  printf("Delete called!\n");
 }
 
 void process_request(int req_file_desc) {
@@ -134,7 +144,7 @@ void process_request(int req_file_desc) {
   for (int i = 0; i < REQUEST_BUFFER_SIZE; i++) {
     if (path_start == -1 && buf[i] == '/') {
       path_start = i;
-    } else if (path_start != -1 && buf[i] == ' ') {
+    } else if (path_start != -1 && (buf[i] == ' ' || buf[i] == '?')) {
       path_end = i;
       break;
     } else if (buf[i] == '\0') {

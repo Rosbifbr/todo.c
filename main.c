@@ -14,6 +14,7 @@
 #define PORT 8080
 #define IP "127.0.0.1"
 #define REQUEST_BUFFER_SIZE 64 * 1024 // hugeaass file
+#define TODO_ARRAY_SIZE 64
 
 enum http_methods {
   GET,
@@ -32,7 +33,7 @@ struct todo {
   int id;
 };
 typedef struct todo todo;
-todo *todos[64]; // program memory
+todo *todos[TODO_ARRAY_SIZE]; // program memory
 
 // MEDIUM LEVEL
 void generate_todos_html(char *buf) {
@@ -42,6 +43,7 @@ void generate_todos_html(char *buf) {
                    "<span>    %s</span>"
                    "</form>";
 
+  // TODO: replace by strcat, stop programming like an animal
   char *_buf = buf;
   for (int i = 0; i < sizeof(todos) / sizeof(todos[0]); i++) {
     if (todos[i] == NULL)
@@ -100,7 +102,54 @@ void get_root_page(int req_file_desc) {
   free(res);
   printf("root called!\n");
 }
-void post_create_todo(int req_file_desc) {
+
+char *get_body_offset(char *req_buffer) {
+  return strstr(req_buffer, "\r\n\r\n");
+}
+
+char *get_post_body_param(char *body, char *param) {
+  char *body_key_offset = strstr(body, param);
+  if (body_key_offset == NULL)
+    return NULL;
+
+  char *value_start = strchr(body_key_offset, '=') + 1;
+  char *value_end = strstr(value_start, "\r\n");
+  char *value = malloc(value_end - value_start);
+  strncpy(value, value_start, value_end - value_start);
+
+  return value;
+}
+
+void write_to_todo_array(char *string) {
+  for (int i = 0; i < TODO_ARRAY_SIZE; i++) {
+    if (todos[i] == NULL) {
+      todos[i] = malloc(sizeof(todo));
+      strcpy(todos[i]->name, string);
+      todos[i]->id = i;
+      printf("Wrote TODO to index %d\n", i);
+      break;
+    }
+  }
+}
+
+void free_todo_from_array(int key) {
+  todo *todo = todos[key];
+  if (todo == NULL)
+    return;
+  todos[key] = NULL;
+  free(todo);
+}
+
+void post_create_todo(int req_file_desc, char *req_buffer) {
+  // get body offset
+  char *body = get_body_offset(req_buffer);
+
+  // Get todo param value
+  char *todo_text = get_post_body_param(body, "todo");
+
+  // Write to todo array
+  write_to_todo_array(todo_text);
+
   // Redirect to root using proper HTTP headers
   char *redirect_response = "HTTP/1.1 302 Found\r\n"
                             "Location: /\r\n"
@@ -110,7 +159,7 @@ void post_create_todo(int req_file_desc) {
   printf("Create called!\n");
 }
 
-void post_delete_todo(int req_file_desc) {
+void post_delete_todo(int req_file_desc, char *req_buffer) {
   // Redirect to root using proper HTTP headers
   char *redirect_response = "HTTP/1.1 302 Found\r\n"
                             "Location: /\r\n"
@@ -158,9 +207,9 @@ void process_request(int req_file_desc) {
   if (method == GET && 0 == strcmp("/", path))
     get_root_page(req_file_desc);
   else if (method == POST && 0 == strcmp("/create", path))
-    post_create_todo(req_file_desc);
+    post_create_todo(req_file_desc, buf);
   else if (method == POST && 0 == strcmp("/delete", path))
-    post_delete_todo(req_file_desc);
+    post_delete_todo(req_file_desc, buf);
   else
     write_response_headers(404, 0, req_file_desc);
 

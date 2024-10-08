@@ -27,24 +27,30 @@ enum http_methods {
   CONNECT
 };
 
-typedef struct {
+struct todo {
   char name[256];
   int id;
-} todo;
+};
+typedef struct todo todo;
 
-// stack alllocation for arra
 todo *todos[64];
 
 // MEDIUM LEVEL
 void generate_todos_html(char *buf) {
-  char *template = "<div id='todo%d' class='todo'>%s</div>\n";
+  char *template = "<form action='/delete' class='todo'>"
+                   "<input type='hidden' name='id' value='%d'></input>"
+                   "<input type='submit' value='Delete'></input>"
+                   "<span>    %s</span>"
+                   "</form>";
 
+  char *_buf = buf;
   for (int i = 0; i < sizeof(todos) / sizeof(todos[0]); i++) {
     if (todos[i] == NULL)
       continue;
-    sprintf(buf, template, todos[i]->id, todos[i]->name);
+
+    sprintf(_buf, template, todos[i]->id, todos[i]->name);
+    _buf += strlen(_buf); // move pointer upwards not to overwrite prev text
   }
-  // free(template);
 }
 
 void write_response_headers(uint status, uint content_length, int fd) {
@@ -63,32 +69,35 @@ void write_response_headers(uint status, uint content_length, int fd) {
 void get_root_page(int req_file_desc) {
   // after writing headers, write page
   char *template =
-      "<html>\n"
-      "<meta>\n"
-      "<title>This is a todo app</title>\n"
-      "</meta>\n"
-      "<body>\n"
-      "<h1>This is a todo app</h1>\n"
+      "<html>"
+      "<meta>"
+      " <title>This is a todo app</title>"
+      "</meta>"
+      "<body>"
+      "<h1>This is a todo app</h1>"
       "<div name='todos'>"
-      "%s" // TODO: todos go here
+      "%s"
       "</div>"
-      "<form action=\"/create\" method=\"POST\">\n"
-      "  <input type=\"text\" name=\"todo\" placeholder=\"Enter your todo\">\n"
-      "  <input type=\"submit\" value=\"Create\">\n"
-      "</form>\n"
-      "</html>\n";
+      "<form action='/create' method='POST'>"
+      "  <input type='text' name='todo' placeholder='Enter your todo'>"
+      "  <input type='submit' value='Create'>"
+      "</form>"
+      "</html>";
+
   // Generate todos for tempalteing
   char *todos_string = malloc(REQUEST_BUFFER_SIZE);
   generate_todos_html(todos_string);
 
   // template the todos into res
-  char *res = malloc(strlen(template));
+  char *res = malloc(strlen(template) + 1);
   sprintf(res, template, todos_string);
-  free(todos_string);
 
-  // send it all to clietn
+  // send it all to client
   write_response_headers(200, strlen(res), req_file_desc);
   write(req_file_desc, res, strlen(res));
+
+  // clean up
+  free(todos_string);
   free(res);
   printf("root called!\n");
 }
@@ -104,7 +113,7 @@ void post_delete_todo(int req_file_desc) {
 void process_request(int req_file_desc) {
   char *buf = malloc(REQUEST_BUFFER_SIZE);
   read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
-  printf("%s\n", buf); // TODO: mmaybe turn this off
+  printf("%s\n", buf);
 
   // Map our request to other functions
   enum http_methods method;
@@ -140,7 +149,7 @@ void process_request(int req_file_desc) {
     get_root_page(req_file_desc);
   else if (method == POST && 0 == strcmp("/create", path))
     post_create_todo(req_file_desc);
-  else if (method == POST && 0 == strcmp("/destroy", path))
+  else if (method == POST && 0 == strcmp("/delete", path))
     post_delete_todo(req_file_desc);
   else
     write_response_headers(404, 0, req_file_desc);
@@ -193,10 +202,15 @@ int create_listen_socket(char *ip, int port) {
 }
 
 int main() {
-  todos[0]->id = 1;
-  strcpy(todos[0]->name, "This is a testing");
   // init
   int sock_desc = create_listen_socket(IP, PORT);
+  todos[0] = malloc(sizeof(todo));
+  todos[0]->id = 1;
+  strcpy(todos[0]->name, "This is a testing");
+
+  todos[1] = malloc(sizeof(todo));
+  todos[1]->id = 2;
+  strcpy(todos[1]->name, "This is the second todo");
 
   // Process C-c and the like so that socket is not hanging
   signal(SIGINT, (void (*)(int))handle_sigint);

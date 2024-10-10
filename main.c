@@ -201,9 +201,8 @@ void post_delete_todo(int req_file_desc, char *req_buffer) {
 
 void process_request(int req_file_desc) {
   char *buf = malloc(REQUEST_BUFFER_SIZE);
-  memset(buf, 0, REQUEST_BUFFER_SIZE); // TODO: check performance of this
-  read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
-  // printf("%s\n", buf);
+  int buf_len = read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
+  buf[buf_len] = '\0'; // Add null terminator as it is not guaranteed
 
   // Map our request to other functions
   enum http_methods method;
@@ -294,13 +293,6 @@ int create_listen_socket(char *ip, int port) {
 int main() {
   // init
   int sock_desc = create_listen_socket(IP, PORT);
-  todos[0] = malloc(sizeof(todo));
-  todos[0]->id = 0;
-  strcpy(todos[0]->name, "This is a testing");
-
-  todos[1] = malloc(sizeof(todo));
-  todos[1]->id = 1;
-  strcpy(todos[1]->name, "This is the second todo");
 
   // Process C-c and the like so that socket is not hanging
   signal(SIGINT, (void (*)(int))handle_sigint);

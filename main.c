@@ -127,9 +127,11 @@ char *get_body_param(char *body, char *param) {
   // Finally extract value
   uint value_len = value_end - value_start;
   char *value = malloc(value_len); // beware this has min 8byte val in x64
-  memset(value, 0, value_len);     // as such, well init it before use
-  for (int i = 0; i < value_len; i++) {
+  for (int i = 0; i <= value_len; i++) {
     value[i] = value_start[i];
+    if (i == value_len) {
+      value[i] = '\0';
+    }
   }
 
   return value;
@@ -199,8 +201,9 @@ void post_delete_todo(int req_file_desc, char *req_buffer) {
 
 void process_request(int req_file_desc) {
   char *buf = malloc(REQUEST_BUFFER_SIZE);
+  memset(buf, 0, REQUEST_BUFFER_SIZE); // TODO: check performance of this
   read(req_file_desc, buf, REQUEST_BUFFER_SIZE);
-  printf("%s\n", buf);
+  // printf("%s\n", buf);
 
   // Map our request to other functions
   enum http_methods method;

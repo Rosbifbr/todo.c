@@ -1,5 +1,6 @@
 # todo.c
-This is a webserver meant to manage a global list of todos.
+This is a highly technologic webserver meant to manage a global list of todos.
+This projects secondary intention is to guarantee I dont get too rusty with my C skills. (pun intended)
 
 # Instructions
 1. gcc main.c

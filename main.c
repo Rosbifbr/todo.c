@@ -45,12 +45,18 @@ void generate_todos_html(char *buf) {
 
   // TODO: replace by strcat, stop programming like an animal
   char *_buf = buf;
+  int active_todos = 0;
   for (int i = 0; i < sizeof(todos) / sizeof(todos[0]); i++) {
     if (todos[i] == NULL)
       continue;
 
     sprintf(_buf, template, todos[i]->id, todos[i]->name);
     _buf += strlen(_buf); // move pointer upwards not to overwrite prev text
+    active_todos++;
+  }
+
+  if (active_todos == 0) {
+    sprintf(_buf, "<p>No todos yet!!</p>");
   }
 }
 
@@ -107,15 +113,24 @@ char *get_body_offset(char *req_buffer) {
   return strstr(req_buffer, "\r\n\r\n");
 }
 
-char *get_post_body_param(char *body, char *param) {
+char *get_body_param(char *body, char *param) {
   char *body_key_offset = strstr(body, param);
   if (body_key_offset == NULL)
     return NULL;
 
   char *value_start = strchr(body_key_offset, '=') + 1;
   char *value_end = strstr(value_start, "\r\n");
-  char *value = malloc(value_end - value_start);
-  strncpy(value, value_start, value_end - value_start);
+  // If no end is detected, that param must be the last
+  if (value_end == NULL)
+    value_end = value_start + strlen(value_start);
+
+  // Finally extract value
+  uint value_len = value_end - value_start;
+  char *value = malloc(value_len); // beware this has min 8byte val in x64
+  memset(value, 0, value_len);     // as such, well init it before use
+  for (int i = 0; i < value_len; i++) {
+    value[i] = value_start[i];
+  }
 
   return value;
 }
@@ -134,8 +149,10 @@ void write_to_todo_array(char *string) {
 
 void free_todo_from_array(int key) {
   todo *todo = todos[key];
-  if (todo == NULL)
+  if (todo == NULL) {
+    printf("No todo with id %d\n", key);
     return;
+  }
   todos[key] = NULL;
   free(todo);
 }
@@ -145,7 +162,7 @@ void post_create_todo(int req_file_desc, char *req_buffer) {
   char *body = get_body_offset(req_buffer);
 
   // Get todo param value
-  char *todo_text = get_post_body_param(body, "todo");
+  char *todo_text = get_body_param(body, "todo");
 
   // Write to todo array
   write_to_todo_array(todo_text);
@@ -160,6 +177,17 @@ void post_create_todo(int req_file_desc, char *req_buffer) {
 }
 
 void post_delete_todo(int req_file_desc, char *req_buffer) {
+  // get body offset
+  char *body = get_body_offset(req_buffer);
+
+  // Get todo param value
+  char *_todo_id = get_body_param(body, "id");
+  printf("Deleting todo with id %s\n", _todo_id);
+
+  int todo_id = atoi(_todo_id);
+
+  free_todo_from_array(todo_id);
+
   // Redirect to root using proper HTTP headers
   char *redirect_response = "HTTP/1.1 302 Found\r\n"
                             "Location: /\r\n"
@@ -264,11 +292,11 @@ int main() {
   // init
   int sock_desc = create_listen_socket(IP, PORT);
   todos[0] = malloc(sizeof(todo));
-  todos[0]->id = 1;
+  todos[0]->id = 0;
   strcpy(todos[0]->name, "This is a testing");
 
   todos[1] = malloc(sizeof(todo));
-  todos[1]->id = 2;
+  todos[1]->id = 1;
   strcpy(todos[1]->name, "This is the second todo");
 
   // Process C-c and the like so that socket is not hanging
